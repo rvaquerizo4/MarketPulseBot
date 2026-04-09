@@ -1,6 +1,7 @@
 const { config } = require("../config");
 const { withRetry } = require("../utils/retry");
 const { isValidQuote } = require("../utils/quoteValidation");
+const { logger } = require("../utils/logger");
 
 function isRetriableStatus(status) {
   return status === 408 || status === 429 || status >= 500;
@@ -49,7 +50,7 @@ async function fetchCryptoQuotes(ids) {
       maxDelayMs: config.apiRetryMaxDelayMs,
       shouldRetry: (error) => isRetriableStatus(error.status) || isRetriableFetchError(error),
       onRetry: (error, attempt, delayMs) => {
-        console.warn(
+        logger.warn(
           `[CoinGecko] Retry ${attempt}/${config.apiRetryAttempts - 1} in ${delayMs}ms: ${error.message}`
         );
       },

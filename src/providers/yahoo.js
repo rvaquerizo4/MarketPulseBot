@@ -1,6 +1,7 @@
 const { config } = require("../config");
 const { withRetry } = require("../utils/retry");
 const { isValidQuote } = require("../utils/quoteValidation");
+const { logger } = require("../utils/logger");
 
 function isRetriableStatus(status) {
   return status === 408 || status === 429 || status >= 500;
@@ -54,7 +55,7 @@ async function fetchOneSymbol(symbol, categoryLabel) {
       maxDelayMs: config.apiRetryMaxDelayMs,
       shouldRetry: (error) => isRetriableStatus(error.status) || isRetriableFetchError(error),
       onRetry: (error, attempt, delayMs) => {
-        console.warn(
+        logger.warn(
           `[Yahoo:${normalized}] Retry ${attempt}/${config.apiRetryAttempts - 1} in ${delayMs}ms: ${error.message}`
         );
       },
@@ -123,7 +124,7 @@ async function fetchYahooQuotes(symbols, categoryLabel) {
       }
 
       const symbol = symbols[index];
-      console.error(`[Yahoo:${symbol}] Fetch failed: ${entry.reason?.message || entry.reason}`);
+      logger.error(`[Yahoo:${symbol}] Fetch failed: ${entry.reason?.message || entry.reason}`);
       return null;
     })
     .filter(Boolean);

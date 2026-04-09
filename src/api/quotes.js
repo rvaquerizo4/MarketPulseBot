@@ -2,6 +2,7 @@ const { config } = require("../config");
 const { fetchCryptoQuotes } = require("../providers/coingecko");
 const { fetchYahooQuotes } = require("../providers/yahoo");
 const { validateQuotes } = require("../utils/quoteValidation");
+const { logger } = require("../utils/logger");
 
 async function fetchAllQuotes() {
   const providers = [
@@ -15,13 +16,14 @@ async function fetchAllQuotes() {
   ];
 
   const settled = await Promise.allSettled(providers.map((provider) => provider.call()));
+  const failedProviders = [];
 
   settled.forEach((result, index) => {
     if (result.status === "rejected") {
       const providerName = providers[index].name;
-      console.error(
-        `[Quotes] Provider ${providerName} failed: ${result.reason?.message || result.reason}`
-      );
+      const reason = result.reason?.message || String(result.reason);
+      failedProviders.push(`${providerName}: ${reason}`);
+      logger.error(`[Quotes] Provider ${providerName} failed: ${reason}`);
     }
   });
 
@@ -32,13 +34,14 @@ async function fetchAllQuotes() {
   const validQuotes = validateQuotes(quotes);
 
   if (validQuotes.length !== quotes.length) {
-    console.warn(
+    logger.warn(
       `[Quotes] Discarded ${quotes.length - validQuotes.length} invalid quote(s) from provider responses`
     );
   }
 
   if (validQuotes.length === 0) {
-    throw new Error("Could not fetch quotes from any provider");
+    const details = failedProviders.length > 0 ? ` | ${failedProviders.join("; ")}` : "";
+    throw new Error(`Could not fetch quotes from any provider${details}`);
   }
 
   return validQuotes;

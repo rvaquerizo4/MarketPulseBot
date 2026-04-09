@@ -48,6 +48,7 @@ Configure your `.env` using `.env.example` as template.
 # Telegram
 TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN_HERE
 TELEGRAM_CHAT_ID=YOUR_CHAT_ID_HERE
+LOG_LEVEL=info
 
 # Markets to monitor
 CRYPTO_IDS=bitcoin

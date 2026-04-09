@@ -36,6 +36,7 @@ function parsePriceTargets(value) {
 }
 
 const config = {
+  logLevel: process.env.LOG_LEVEL || "info",
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
   telegramChatId: process.env.TELEGRAM_CHAT_ID,
   cryptoIds: parseCsv(process.env.CRYPTO_IDS || "bitcoin,ethereum"),

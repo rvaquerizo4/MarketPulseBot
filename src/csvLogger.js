@@ -1,5 +1,6 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { logger } = require("./utils/logger");
 
 const CSV_FILE = path.join(process.cwd(), "data", "history.csv");
 const CSV_HEADER =
@@ -37,7 +38,7 @@ async function appendToCsv(quotes) {
 
     await fs.appendFile(CSV_FILE, lines + "\n", "utf8");
   } catch (err) {
-    console.error(`[CSV Logger] Error: ${err.message}`);
+    logger.error(`[CSV Logger] Error: ${err.message}`);
   }
 }
 

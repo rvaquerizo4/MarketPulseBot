@@ -2,6 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const STATE_FILE = path.join(process.cwd(), "data", "state.json");
+let saveQueue = Promise.resolve();
 
 const DEFAULT_STATE = {
   lastDailyReportDate: null,
@@ -43,8 +44,21 @@ async function loadState() {
 }
 
 async function saveState(state) {
-  await fs.mkdir(path.dirname(STATE_FILE), { recursive: true });
-  await fs.writeFile(STATE_FILE, JSON.stringify(state, null, 2), "utf8");
+  const payload = JSON.stringify(state, null, 2);
+
+  saveQueue = saveQueue
+    .catch(() => {
+      // Keep the queue alive after a failed write so future saves can proceed.
+    })
+    .then(async () => {
+      await fs.mkdir(path.dirname(STATE_FILE), { recursive: true });
+
+      const tmpFile = `${STATE_FILE}.${process.pid}.${Date.now()}.tmp`;
+      await fs.writeFile(tmpFile, payload, "utf8");
+      await fs.rename(tmpFile, STATE_FILE);
+    });
+
+  await saveQueue;
 }
 
 module.exports = {

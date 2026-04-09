@@ -91,6 +91,10 @@ MARKET_CLOSE_MINUTE=0
 
 # Telegram command polling
 COMMAND_POLL_INTERVAL_SECONDS=30
+TELEGRAM_LONG_POLLING_TIMEOUT_SECONDS=25
+
+# Data freshness guard for non-crypto assets
+MAX_QUOTE_AGE_MINUTES=120
 ```
 
 ## Telegram Commands

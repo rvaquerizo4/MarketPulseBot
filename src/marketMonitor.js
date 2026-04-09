@@ -52,6 +52,12 @@ function formatVolume(value) {
   }).format(value);
 }
 
+function isFreshForAlerts(item) {
+  if (!item) return false;
+  if (item.category === "Crypto") return true;
+  return !item.isStale;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -177,7 +183,8 @@ function groupByCategory(quotes) {
 function buildDailyReport(quotes, yesterdaySnapshot = {}, priceHistory = {}) {
   const today = getTodayLocalDate();
   const grouped = groupByCategory(quotes);
-  const sortedByChange = [...quotes].sort((a, b) => {
+  const rankingBase = quotes.filter((q) => isFreshForAlerts(q));
+  const sortedByChange = [...rankingBase].sort((a, b) => {
     const av = Number.isFinite(a.change24hPct) ? a.change24hPct : -Infinity;
     const bv = Number.isFinite(b.change24hPct) ? b.change24hPct : -Infinity;
     return bv - av;
@@ -250,11 +257,15 @@ function buildDailyReport(quotes, yesterdaySnapshot = {}, priceHistory = {}) {
         rsi !== null
           ? `\nRSI(14): <b>${rsi}</b> ${rsiEmoji(rsi)} <i>${rsiLabel(rsi)}</i>`
           : "";
+      const freshnessStr =
+        item.category !== "Crypto" && item.isStale
+          ? `\n⚠️ Data age: <b>${escapeHtml(String(item.ageMinutes ?? "N/D"))} min</b> (outside freshness window)`
+          : "";
 
       lines.push(
         `${trendIcon(item.change24hPct)} <b>${symbol}</b> <i>${name}</i>  ${price}\n` +
           `24h: <b>${change24h}</b>${ydayStr}  ${moveBar(item.change24hPct)}\n` +
-          `Volume: ${volume}${rsiStr}`
+          `Volume: ${volume}${rsiStr}${freshnessStr}`
       );
       lines.push("");
     }
@@ -349,6 +360,7 @@ function checkPriceTargets(quotes, lastPriceTargetAlertAt, nowMs) {
   for (const target of config.priceTargets) {
     const item = quotes.find((q) => q.symbol === target.symbol);
     if (!item || !Number.isFinite(item.price)) continue;
+    if (!isFreshForAlerts(item)) continue;
 
     const triggered =
       target.direction === "ABOVE" ? item.price > target.threshold : item.price < target.threshold;
@@ -434,6 +446,10 @@ function buildSnapshot(quotes) {
       currency: item.currency,
       change24hPct: item.change24hPct,
       volume: item.volume,
+      marketState: item.marketState,
+      lastTradeAt: item.lastTradeAt,
+      ageMinutes: item.ageMinutes,
+      isStale: item.isStale,
       checkedAt: new Date().toISOString(),
     };
   }
@@ -446,6 +462,8 @@ function getSignificantChanges(quotes, previousSnapshot, lastAlertAt, priceHisto
   const nowMs = Date.now();
 
   for (const item of quotes) {
+    if (!isFreshForAlerts(item)) continue;
+
     const prev = previousSnapshot[item.key];
     if (!prev || !Number.isFinite(prev.price) || prev.price === 0) continue;
 
@@ -521,6 +539,7 @@ function buildAlertMessage(alert) {
 async function runCycle(state, options = { isStartup: false }) {
   const nowMs = Date.now();
   const quotes = await fetchAllQuotes();
+  const freshQuotes = quotes.filter((q) => isFreshForAlerts(q));
   const today = getTodayLocalDate();
   const weekKey = getISOWeekKey();
   const isMonday = new Date().getDay() === 1;
@@ -539,24 +558,24 @@ async function runCycle(state, options = { isStartup: false }) {
 
   // Weekly report (Monday, first startup of the week)
   if (options.isStartup && isMonday && state.lastWeeklyReportDate !== weekKey) {
-    const weeklyText = buildWeeklyReport(quotes, state.weeklyStartSnapshot || {});
+    const weeklyText = buildWeeklyReport(freshQuotes, state.weeklyStartSnapshot || {});
     await sendTelegramMessage(weeklyText, { parseMode: "HTML" });
     state.lastWeeklyReportDate = weekKey;
-    state.weeklyStartSnapshot = buildSnapshot(quotes);
+    state.weeklyStartSnapshot = buildSnapshot(freshQuotes);
   }
 
   // Update price history
   const updatedPriceHistory = updatePriceHistory(state.priceHistory || {}, quotes, nowMs);
 
   // Market schedule alerts
-  const scheduleAlerts = checkMarketSchedule(state, quotes, nowMs);
+  const scheduleAlerts = checkMarketSchedule(state, freshQuotes, nowMs);
   for (const text of scheduleAlerts) {
     await sendTelegramMessage(text, { parseMode: "HTML" });
   }
 
   // Price target alerts
   const { alerts: targetAlerts, updatedLastAlertAt: updatedTargetAt } = checkPriceTargets(
-    quotes,
+    freshQuotes,
     state.lastPriceTargetAlertAt || {},
     nowMs
   );
@@ -566,7 +585,7 @@ async function runCycle(state, options = { isStartup: false }) {
 
   // Significant move alerts
   const { alerts, updatedLastAlertAt } = getSignificantChanges(
-    quotes,
+    freshQuotes,
     state.previousSnapshot || {},
     state.lastAlertAt || {},
     updatedPriceHistory

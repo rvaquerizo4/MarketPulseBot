@@ -77,6 +77,11 @@ const config = {
   marketCloseMinute: parseNumber(process.env.MARKET_CLOSE_MINUTE, 0),
   commandPollIntervalMs:
     parseNumber(process.env.COMMAND_POLL_INTERVAL_SECONDS, 30) * 1000,
+  telegramLongPollingTimeoutSeconds: parseNumber(
+    process.env.TELEGRAM_LONG_POLLING_TIMEOUT_SECONDS,
+    25
+  ),
+  maxQuoteAgeMinutes: parseNumber(process.env.MAX_QUOTE_AGE_MINUTES, 120),
   requestTimeoutMs: 15000,
 };
 
@@ -117,6 +122,24 @@ function validateConfig() {
 
   if (config.priceHistoryRetentionMs <= 0) {
     throw new Error("PRICE_HISTORY_RETENTION_HOURS must be greater than 0");
+  }
+
+  if (
+    !Number.isFinite(config.telegramLongPollingTimeoutSeconds) ||
+    config.telegramLongPollingTimeoutSeconds < 0 ||
+    config.telegramLongPollingTimeoutSeconds > 50
+  ) {
+    throw new Error(
+      "TELEGRAM_LONG_POLLING_TIMEOUT_SECONDS must be between 0 and 50"
+    );
+  }
+
+  if (config.commandPollIntervalMs <= 0) {
+    throw new Error("COMMAND_POLL_INTERVAL_SECONDS must be greater than 0");
+  }
+
+  if (!Number.isFinite(config.maxQuoteAgeMinutes) || config.maxQuoteAgeMinutes <= 0) {
+    throw new Error("MAX_QUOTE_AGE_MINUTES must be greater than 0");
   }
 
   if (missing.length > 0) {

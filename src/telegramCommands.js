@@ -1,17 +1,22 @@
 const { config } = require("./config");
 const { sendTelegramMessage } = require("./telegram");
 const { fetchYahooQuotes } = require("./providers/yahoo");
+const { saveState } = require("./stateStore");
 
 async function getUpdates(lastUpdateId) {
   const url = new URL(
     `https://api.telegram.org/bot${config.telegramBotToken}/getUpdates`
   );
   url.searchParams.set("offset", String(lastUpdateId + 1));
-  url.searchParams.set("timeout", "0");
+  url.searchParams.set("timeout", String(config.telegramLongPollingTimeoutSeconds));
   url.searchParams.set("limit", "10");
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  const effectiveTimeoutMs = Math.max(
+    config.requestTimeoutMs,
+    (config.telegramLongPollingTimeoutSeconds + 5) * 1000
+  );
+  const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
     const res = await fetch(url, { signal: controller.signal });
@@ -100,11 +105,15 @@ async function handleCommand(text, state, handlers) {
           ? ` — <i>${esc(cached.name)}</i>`
           : "";
       const checkedAt = new Date(cached.checkedAt).toLocaleString("es-ES");
+      const staleWarn =
+        cached.isStale
+          ? `\n⚠️ <i>Dato no fresco (${esc(String(cached.ageMinutes ?? "N/D"))} min desde última actualización de mercado).</i>`
+          : "";
       await sendTelegramMessage(
         `<b>${esc(cached.symbol)}</b>${name}\n` +
           `Price: <b>${esc(fmtPrice(cached.price, cached.currency))}</b>\n` +
           `24h: <b>${esc(fmtPct(cached.change24hPct))}</b>\n` +
-          `<i>Last check data: ${esc(checkedAt)}</i>`,
+          `<i>Last check data: ${esc(checkedAt)}</i>${staleWarn}`,
         { parseMode: "HTML" }
       );
       return;
@@ -177,6 +186,11 @@ async function pollAndHandle(state, handlers) {
     const { updates, nextOffset } = await getUpdates(state.lastUpdateId || 0);
     if (nextOffset !== state.lastUpdateId) {
       state.lastUpdateId = nextOffset;
+      try {
+        await saveState(state);
+      } catch {
+        // Offset persistence errors are non-critical; next cycle save may still persist it.
+      }
     }
 
     for (const update of updates) {

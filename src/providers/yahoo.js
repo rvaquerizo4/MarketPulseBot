@@ -32,6 +32,18 @@ async function fetchOneSymbol(symbol, categoryLabel) {
 
     const previousClose = Number(meta.chartPreviousClose ?? meta.previousClose ?? 0);
     const currentPrice = Number(meta.regularMarketPrice);
+    const marketState = String(meta.marketState || "").toUpperCase();
+    const regularMarketTimeSec = Number(meta.regularMarketTime ?? 0);
+    const lastTradeAt =
+      Number.isFinite(regularMarketTimeSec) && regularMarketTimeSec > 0
+        ? new Date(regularMarketTimeSec * 1000).toISOString()
+        : null;
+    const ageMinutes =
+      Number.isFinite(regularMarketTimeSec) && regularMarketTimeSec > 0
+        ? Math.max(0, (Date.now() - regularMarketTimeSec * 1000) / 60000)
+        : null;
+    const isStale =
+      Number.isFinite(ageMinutes) && ageMinutes > config.maxQuoteAgeMinutes;
     const change24hPct =
       Number.isFinite(previousClose) && previousClose > 0
         ? ((currentPrice - previousClose) / previousClose) * 100
@@ -48,6 +60,10 @@ async function fetchOneSymbol(symbol, categoryLabel) {
       currency: meta.currency || "USD",
       change24hPct,
       volume: Number(meta.regularMarketVolume ?? 0),
+      marketState,
+      lastTradeAt,
+      ageMinutes: Number.isFinite(ageMinutes) ? Number(ageMinutes.toFixed(1)) : null,
+      isStale,
     };
   } finally {
     clearTimeout(timeout);

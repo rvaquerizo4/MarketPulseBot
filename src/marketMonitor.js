@@ -18,6 +18,12 @@ const {
   trendIcon,
   moveBar,
 } = require("./utils/formatters");
+const {
+  recordEvent,
+  buildEventFromAlert,
+  buildEventFromMessage,
+  formatRecentEvents,
+} = require("./utils/eventHistory");
 
 function getTodayLocalDate() {
   const now = new Date();
@@ -76,7 +82,7 @@ function groupByCategory(quotes) {
   return grouped;
 }
 
-function buildDailyReport(quotes, yesterdaySnapshot = {}, priceHistory = {}) {
+function buildDailyReport(quotes, yesterdaySnapshot = {}, priceHistory = {}, recentEvents = []) {
   const today = getTodayLocalDate();
   const grouped = groupByCategory(quotes);
   const rankingBase = quotes.filter((q) => isFreshForAlerts(q));
@@ -169,6 +175,12 @@ function buildDailyReport(quotes, yesterdaySnapshot = {}, priceHistory = {}) {
 
   if (quotes.length === 0) {
     lines.push("⚠️ Could not fetch quotes at this time.");
+  }
+
+  if (config.dailyReportRecentEventsLimit > 0) {
+    lines.push("");
+    lines.push("<b>🕘 Recent Events</b>");
+    lines.push(formatRecentEvents(recentEvents, config.dailyReportRecentEventsLimit));
   }
 
   lines.push("<i>Automated background monitoring is active</i>");
@@ -278,7 +290,12 @@ async function runCycle(state, options = { isStartup: false }) {
 
   // Daily report (first startup of the day)
   if (options.isStartup && state.lastDailyReportDate !== today) {
-    const reportText = buildDailyReport(quotes, state.yesterdaySnapshot, state.priceHistory || {});
+    const reportText = buildDailyReport(
+      quotes,
+      state.yesterdaySnapshot,
+      state.priceHistory || {},
+      state.recentEvents || []
+    );
     await sendTelegramMessage(reportText, { parseMode: "HTML" });
     state.lastDailyReportDate = today;
   }
@@ -298,6 +315,11 @@ async function runCycle(state, options = { isStartup: false }) {
   const scheduleAlerts = checkMarketSchedule(state, freshQuotes, nowMs, getTodayLocalDate);
   for (const text of scheduleAlerts) {
     await sendTelegramMessage(text, { parseMode: "HTML" });
+    recordEvent(
+      state,
+      buildEventFromMessage("schedule", text.replace(/<[^>]+>/g, ""), "info"),
+      config.recentEventsLimit
+    );
   }
 
   // Price target alerts
@@ -308,6 +330,11 @@ async function runCycle(state, options = { isStartup: false }) {
   );
   for (const text of targetAlerts) {
     await sendTelegramMessage(text, { parseMode: "HTML" });
+    recordEvent(
+      state,
+      buildEventFromMessage("target", text.replace(/<[^>]+>/g, ""), "warning"),
+      config.recentEventsLimit
+    );
   }
 
   // Significant move alerts
@@ -319,6 +346,7 @@ async function runCycle(state, options = { isStartup: false }) {
   );
   for (const alert of alerts) {
     await sendTelegramMessage(buildAlertMessage(alert), { parseMode: "HTML" });
+    recordEvent(state, buildEventFromAlert(alert), config.recentEventsLimit);
   }
 
   // Historical CSV log

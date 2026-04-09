@@ -59,7 +59,7 @@ describe("alerts engine", () => {
       level: { key: "strong", label: "Strong", emoji: "🟠" },
     });
 
-    expect(message).toContain("<b>Strong</b>");
+    expect(message).toContain("<b>Strong Move</b>");
     expect(message).toContain("<b>AAPL</b>");
     expect(message).toContain("since the last check");
     expect(message).toContain("Accumulated");

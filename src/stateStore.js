@@ -16,6 +16,7 @@ const DEFAULT_STATE = {
   lastAlertAt: {},
   lastPriceTargetAlertAt: {},
   priceHistory: {},
+  recentEvents: [],
   lastUpdateId: 0,
 };
 
@@ -33,6 +34,7 @@ async function loadState() {
       lastAlertAt: parsed.lastAlertAt || {},
       lastPriceTargetAlertAt: parsed.lastPriceTargetAlertAt || {},
       priceHistory: parsed.priceHistory || {},
+      recentEvents: parsed.recentEvents || [],
       lastUpdateId: parsed.lastUpdateId || 0,
     };
   } catch (error) {

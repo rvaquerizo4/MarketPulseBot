@@ -2,6 +2,7 @@ const { config } = require("../config");
 const { sendTelegramMessage } = require("../telegram");
 const { fetchYahooQuotes } = require("../providers/yahoo");
 const { formatPrice, formatPercent, escapeHtml } = require("../utils/formatters");
+const { formatRecentEvents } = require("../utils/eventHistory");
 
 async function handleCommand(text, state, handlers) {
   const parts = text.trim().split(/\s+/);
@@ -14,7 +15,8 @@ async function handleCommand(text, state, handlers) {
       const report = handlers.buildDailyReport(
         quotes,
         state.yesterdaySnapshot || {},
-        state.priceHistory || {}
+        state.priceHistory || {},
+        state.recentEvents || []
       );
       await sendTelegramMessage(report, { parseMode: "HTML" });
     } catch (e) {
@@ -96,7 +98,16 @@ async function handleCommand(text, state, handlers) {
         `Monitored assets: <b>${assets}</b>\n` +
         `Check interval: <b>${intervalMin} min</b>\n\n` +
         `Last daily report: <b>${escapeHtml(state.lastDailyReportDate || "Never")}</b>\n` +
-        `Last weekly report: <b>${escapeHtml(state.lastWeeklyReportDate || "Never")}</b>`,
+        `Last weekly report: <b>${escapeHtml(state.lastWeeklyReportDate || "Never")}</b>\n` +
+        `Stored recent events: <b>${escapeHtml(String((state.recentEvents || []).length))}</b>`,
+      { parseMode: "HTML" }
+    );
+    return;
+  }
+
+  if (command === "/historial" || command === "/events") {
+    await sendTelegramMessage(
+      `<b>🕘 Recent Events</b>\n\n${formatRecentEvents(state.recentEvents || [], 10)}`,
       { parseMode: "HTML" }
     );
     return;
@@ -108,6 +119,7 @@ async function handleCommand(text, state, handlers) {
         `/report — Full dashboard right now\n` +
         `/price SYMBOL — Current price for an asset\n` +
         `/status — Bot status and last check\n` +
+        `/events — Recent alert and schedule history\n` +
         `/help — This help\n\n` +
         `<i>Examples: /price BTC  /price GLD  /price AAPL</i>`,
       { parseMode: "HTML" }

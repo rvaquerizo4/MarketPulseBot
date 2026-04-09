@@ -240,12 +240,20 @@ function buildAlertMessage(alert) {
     alert.name && alert.name !== alert.symbol
       ? `<b>${escapeHtml(alert.symbol)}</b> <i>${escapeHtml(alert.name)}</i>`
       : `<b>${escapeHtml(alert.symbol)}</b>`;
+  const banner =
+    alert.level.key === "critical"
+      ? "🚨 <b>Critical Move</b>"
+      : alert.level.key === "strong"
+        ? "🟠 <b>Strong Move</b>"
+        : "🟡 <b>Warning Move</b>";
 
   const lines = [
-    `${alert.level.emoji} <b>${escapeHtml(alert.level.label)}</b> — ${escapeHtml(alert.category)}`,
-    `${displayName} ${direction} <b>${absDelta.toFixed(2)}%</b> since the last check`,
-    `Before: ${escapeHtml(formatPrice(alert.previousPrice, alert.currency))} → Now: <b>${escapeHtml(formatPrice(alert.currentPrice, alert.currency))}</b>`,
-    `24h: <b>${escapeHtml(formatPercent(alert.change24hPct))}</b>  |  Vol: ${escapeHtml(formatVolume(alert.volume))}`,
+    `${banner} ${alert.level.emoji}`,
+    `<b>Category:</b> ${escapeHtml(alert.category)}`,
+    `<b>Asset:</b> ${displayName}`,
+    `<b>Movement:</b> ${direction} <b>${absDelta.toFixed(2)}%</b> since the last check`,
+    `<b>Price:</b> ${escapeHtml(formatPrice(alert.previousPrice, alert.currency))} → <b>${escapeHtml(formatPrice(alert.currentPrice, alert.currency))}</b>`,
+    `<b>24h:</b> ${escapeHtml(formatPercent(alert.change24hPct))}  |  <b>Vol:</b> ${escapeHtml(formatVolume(alert.volume))}`,
   ];
 
   if (Number.isFinite(alert.accumulatedChangePct)) {

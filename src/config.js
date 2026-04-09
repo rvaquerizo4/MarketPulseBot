@@ -88,6 +88,8 @@ const config = {
   ),
   telegramUpdatesLimit: parseNumber(process.env.TELEGRAM_UPDATES_LIMIT, 10),
   maxQuoteAgeMinutes: parseNumber(process.env.MAX_QUOTE_AGE_MINUTES, 120),
+  recentEventsLimit: parseNumber(process.env.RECENT_EVENTS_LIMIT, 25),
+  dailyReportRecentEventsLimit: parseNumber(process.env.DAILY_REPORT_RECENT_EVENTS_LIMIT, 5),
   apiRetryAttempts: parseNumber(process.env.API_RETRY_ATTEMPTS, 3),
   apiRetryBaseDelayMs: parseNumber(process.env.API_RETRY_BASE_DELAY_MS, 500),
   apiRetryBackoffMultiplier: parseNumber(
@@ -164,6 +166,19 @@ function validateConfig() {
 
   if (!Number.isFinite(config.maxQuoteAgeMinutes) || config.maxQuoteAgeMinutes <= 0) {
     throw new Error("MAX_QUOTE_AGE_MINUTES must be greater than 0");
+  }
+
+  if (!Number.isFinite(config.recentEventsLimit) || config.recentEventsLimit < 0) {
+    throw new Error("RECENT_EVENTS_LIMIT must be greater than or equal to 0");
+  }
+
+  if (
+    !Number.isFinite(config.dailyReportRecentEventsLimit) ||
+    config.dailyReportRecentEventsLimit < 0
+  ) {
+    throw new Error(
+      "DAILY_REPORT_RECENT_EVENTS_LIMIT must be greater than or equal to 0"
+    );
   }
 
   if (!Number.isFinite(config.apiRetryAttempts) || config.apiRetryAttempts < 1) {

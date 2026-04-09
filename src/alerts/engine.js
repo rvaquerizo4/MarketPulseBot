@@ -30,6 +30,51 @@ function isFreshForAlerts(item) {
   return !item.isStale;
 }
 
+function calculatePercentageChange(currentPrice, previousPrice) {
+  if (
+    !Number.isFinite(currentPrice) ||
+    !Number.isFinite(previousPrice) ||
+    previousPrice <= 0
+  ) {
+    return null;
+  }
+
+  return ((currentPrice - previousPrice) / previousPrice) * 100;
+}
+
+function shouldSendAlert(item, previousSnapshotEntry, lastAlertIsoAt, nowMs = Date.now()) {
+  if (!isFreshForAlerts(item)) {
+    return false;
+  }
+
+  if (
+    !previousSnapshotEntry ||
+    !Number.isFinite(previousSnapshotEntry.price) ||
+    previousSnapshotEntry.price <= 0
+  ) {
+    return false;
+  }
+
+  const deltaPct = calculatePercentageChange(item.price, previousSnapshotEntry.price);
+  if (!Number.isFinite(deltaPct)) {
+    return false;
+  }
+
+  const absDeltaPct = Math.abs(deltaPct);
+  const categoryType = getCategoryType(item.category);
+  const warningThreshold = config.thresholds[categoryType].warning;
+  if (absDeltaPct < warningThreshold) {
+    return false;
+  }
+
+  const lastAlertMs = lastAlertIsoAt ? Date.parse(lastAlertIsoAt) : 0;
+  if (Number.isFinite(lastAlertMs) && nowMs - lastAlertMs < config.alertCooldownMs) {
+    return false;
+  }
+
+  return true;
+}
+
 function calculateAccumulatedChangePct(entries, currentPrice, nowMs) {
   if (!Array.isArray(entries) || entries.length === 0 || !Number.isFinite(currentPrice)) {
     return null;
@@ -147,24 +192,15 @@ function getSignificantChanges(quotes, previousSnapshot, lastAlertAt, priceHisto
   const updatedLastAlertAt = { ...lastAlertAt };
 
   for (const item of quotes) {
-    if (!isFreshForAlerts(item)) continue;
-
     const prev = previousSnapshot[item.key];
-    if (!prev || !Number.isFinite(prev.price) || prev.price === 0) continue;
-
-    const deltaPct = ((item.price - prev.price) / prev.price) * 100;
-    const absDeltaPct = Math.abs(deltaPct);
-    const categoryType = getCategoryType(item.category);
-    const warningThreshold = config.thresholds[categoryType].warning;
-    if (absDeltaPct < warningThreshold) continue;
-
-    const lastAlertMs = updatedLastAlertAt[item.key]
-      ? Date.parse(updatedLastAlertAt[item.key])
-      : 0;
-
-    if (Number.isFinite(lastAlertMs) && nowMs - lastAlertMs < config.alertCooldownMs) {
+    const canAlert = shouldSendAlert(item, prev, updatedLastAlertAt[item.key], nowMs);
+    if (!canAlert) {
       continue;
     }
+
+    const deltaPct = calculatePercentageChange(item.price, prev.price);
+    const absDeltaPct = Math.abs(deltaPct);
+    const categoryType = getCategoryType(item.category);
 
     updatedLastAlertAt[item.key] = new Date(nowMs).toISOString();
 
@@ -223,6 +259,8 @@ function buildAlertMessage(alert) {
 
 module.exports = {
   isFreshForAlerts,
+  calculatePercentageChange,
+  shouldSendAlert,
   checkPriceTargets,
   checkMarketSchedule,
   getSignificantChanges,

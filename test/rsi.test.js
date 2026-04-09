@@ -1,29 +1,29 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-
 const { calculateRSI, rsiLabel } = require("../src/rsi");
 
-test("calculateRSI returns null with insufficient data", () => {
-  const result = calculateRSI([
-    { ts: 1, price: 100 },
-    { ts: 2, price: 101 },
-  ]);
-  assert.equal(result, null);
-});
+describe("RSI", () => {
+  test("calculateRSI returns null with insufficient data", () => {
+    const result = calculateRSI([
+      { ts: 1, price: 100 },
+      { ts: 2, price: 101 },
+    ]);
+    expect(result).toBeNull();
+  });
 
-test("calculateRSI returns a number between 0 and 100", () => {
-  const entries = Array.from({ length: 20 }, (_, i) => ({
-    ts: i,
-    price: 100 + Math.sin(i) * 4,
-  }));
+  test("calculateRSI returns a number between 0 and 100", () => {
+    const entries = Array.from({ length: 20 }, (_, i) => ({
+      ts: i,
+      price: 100 + Math.sin(i) * 4,
+    }));
 
-  const result = calculateRSI(entries);
-  assert.equal(typeof result, "number");
-  assert.ok(result >= 0 && result <= 100);
-});
+    const result = calculateRSI(entries);
+    expect(typeof result).toBe("number");
+    expect(result).toBeGreaterThanOrEqual(0);
+    expect(result).toBeLessThanOrEqual(100);
+  });
 
-test("rsiLabel maps thresholds", () => {
-  assert.equal(rsiLabel(80), "Overbought");
-  assert.equal(rsiLabel(20), "Oversold");
-  assert.equal(rsiLabel(50), "Neutral");
+  test("rsiLabel maps thresholds", () => {
+    expect(rsiLabel(80)).toBe("Overbought");
+    expect(rsiLabel(20)).toBe("Oversold");
+    expect(rsiLabel(50)).toBe("Neutral");
+  });
 });

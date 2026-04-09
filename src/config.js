@@ -87,6 +87,13 @@ const config = {
   ),
   telegramUpdatesLimit: parseNumber(process.env.TELEGRAM_UPDATES_LIMIT, 10),
   maxQuoteAgeMinutes: parseNumber(process.env.MAX_QUOTE_AGE_MINUTES, 120),
+  apiRetryAttempts: parseNumber(process.env.API_RETRY_ATTEMPTS, 3),
+  apiRetryBaseDelayMs: parseNumber(process.env.API_RETRY_BASE_DELAY_MS, 500),
+  apiRetryBackoffMultiplier: parseNumber(
+    process.env.API_RETRY_BACKOFF_MULTIPLIER,
+    2
+  ),
+  apiRetryMaxDelayMs: parseNumber(process.env.API_RETRY_MAX_DELAY_MS, 4000),
   requestTimeoutMs: 15000,
 };
 
@@ -156,6 +163,25 @@ function validateConfig() {
 
   if (!Number.isFinite(config.maxQuoteAgeMinutes) || config.maxQuoteAgeMinutes <= 0) {
     throw new Error("MAX_QUOTE_AGE_MINUTES must be greater than 0");
+  }
+
+  if (!Number.isFinite(config.apiRetryAttempts) || config.apiRetryAttempts < 1) {
+    throw new Error("API_RETRY_ATTEMPTS must be greater than or equal to 1");
+  }
+
+  if (!Number.isFinite(config.apiRetryBaseDelayMs) || config.apiRetryBaseDelayMs < 0) {
+    throw new Error("API_RETRY_BASE_DELAY_MS must be greater than or equal to 0");
+  }
+
+  if (
+    !Number.isFinite(config.apiRetryBackoffMultiplier) ||
+    config.apiRetryBackoffMultiplier < 1
+  ) {
+    throw new Error("API_RETRY_BACKOFF_MULTIPLIER must be greater than or equal to 1");
+  }
+
+  if (!Number.isFinite(config.apiRetryMaxDelayMs) || config.apiRetryMaxDelayMs < 0) {
+    throw new Error("API_RETRY_MAX_DELAY_MS must be greater than or equal to 0");
   }
 
   if (missing.length > 0) {

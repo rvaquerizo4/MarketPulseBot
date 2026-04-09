@@ -1,0 +1,28 @@
+{
+  "name": "market-watcher-telegram",
+  "version": "1.0.0",
+  "description": "Telegram market watcher for crypto, ETFs, index funds and stocks",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "check": "node scripts/check-syntax.js",
+    "test": "node --test",
+    "ci": "npm run check && npm test"
+  },
+  "keywords": [
+    "telegram",
+    "markets",
+    "crypto",
+    "etf",
+    "alerts"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

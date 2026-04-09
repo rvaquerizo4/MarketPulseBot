@@ -1,9 +1,23 @@
 const { config } = require("./config");
 const { sendTelegramMessage } = require("./telegram");
-const { fetchCryptoQuotes } = require("./providers/coingecko");
-const { fetchYahooQuotes } = require("./providers/yahoo");
 const { calculateRSI, rsiEmoji, rsiLabel } = require("./rsi");
 const { appendToCsv } = require("./csvLogger");
+const { fetchAllQuotes } = require("./api/quotes");
+const {
+  isFreshForAlerts,
+  checkPriceTargets,
+  checkMarketSchedule,
+  getSignificantChanges,
+  buildAlertMessage,
+} = require("./alerts/engine");
+const {
+  formatPercent,
+  formatPrice,
+  formatVolume,
+  escapeHtml,
+  trendIcon,
+  moveBar,
+} = require("./utils/formatters");
 
 function getTodayLocalDate() {
   const now = new Date();
@@ -22,63 +36,6 @@ function getISOWeekKey() {
   return `${d.getFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
 
-function formatPercent(value) {
-  if (!Number.isFinite(value)) return "N/D";
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
-}
-
-function formatPrice(value, currency = "USD") {
-  if (!Number.isFinite(value)) return "N/D";
-
-  const fractionDigits = value < 1 ? 6 : 2;
-  try {
-    return new Intl.NumberFormat("es-ES", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: fractionDigits,
-      maximumFractionDigits: fractionDigits,
-    }).format(value);
-  } catch {
-    return `${value.toFixed(fractionDigits)} ${currency}`;
-  }
-}
-
-function formatVolume(value) {
-  if (!Number.isFinite(value) || value <= 0) return "N/D";
-  return new Intl.NumberFormat("es-ES", {
-    notation: "compact",
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function isFreshForAlerts(item) {
-  if (!item) return false;
-  if (item.category === "Crypto") return true;
-  return !item.isStale;
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function trendIcon(change24hPct) {
-  if (!Number.isFinite(change24hPct)) return "⚪";
-  if (change24hPct >= 1) return "🟢";
-  if (change24hPct <= -1) return "🔴";
-  return "🟡";
-}
-
-function moveBar(change24hPct) {
-  if (!Number.isFinite(change24hPct)) return "▫▫▫▫▫";
-  const blocks = Math.min(5, Math.max(1, Math.round(Math.abs(change24hPct) / 1.5)));
-  const active = change24hPct >= 0 ? "🟩" : "🟥";
-  return active.repeat(blocks) + "⬜".repeat(5 - blocks);
-}
-
 function categoryHeader(category) {
   if (category === "Crypto") return "🪙 <b>Cryptocurrencies</b>";
   if (category === "ETF") return "📈 <b>ETFs</b>";
@@ -91,24 +48,6 @@ function average24hChange(quotes) {
   if (valid.length === 0) return null;
   const sum = valid.reduce((acc, q) => acc + q.change24hPct, 0);
   return sum / valid.length;
-}
-
-function getCategoryType(category) {
-  if (category === "Crypto") return "crypto";
-  if (category === "ETF") return "etf";
-  if (category === "Stocks") return "stock";
-  return "index";
-}
-
-function getAlertLevel(absDeltaPct, categoryType) {
-  const thresholds = config.thresholds[categoryType];
-  if (absDeltaPct >= thresholds.critical) {
-    return { key: "critical", label: "Critical", emoji: "🔴" };
-  }
-  if (absDeltaPct >= thresholds.strong) {
-    return { key: "strong", label: "Strong", emoji: "🟠" };
-  }
-  return { key: "warning", label: "Warning", emoji: "🟡" };
 }
 
 function updatePriceHistory(priceHistory, quotes, nowMs) {
@@ -124,49 +63,6 @@ function updatePriceHistory(priceHistory, quotes, nowMs) {
   }
 
   return nextHistory;
-}
-
-function calculateAccumulatedChangePct(entries, currentPrice, nowMs) {
-  if (!Array.isArray(entries) || entries.length === 0 || !Number.isFinite(currentPrice)) {
-    return null;
-  }
-
-  const targetTs = nowMs - config.accumulatedChangeWindowMs;
-  let reference = null;
-
-  for (const entry of entries) {
-    if (!Number.isFinite(entry.ts) || !Number.isFinite(entry.price)) continue;
-    if (entry.ts <= targetTs) {
-      if (!reference || entry.ts > reference.ts) {
-        reference = entry;
-      }
-    }
-  }
-
-  if (!reference || reference.price === 0) {
-    return null;
-  }
-
-  return ((currentPrice - reference.price) / reference.price) * 100;
-}
-
-async function fetchAllQuotes() {
-  const settled = await Promise.allSettled([
-    fetchCryptoQuotes(config.cryptoIds),
-    fetchYahooQuotes(config.etfSymbols, "ETF"),
-    fetchYahooQuotes(config.indexFundSymbols, "Index Fund"),
-    fetchYahooQuotes(config.stockSymbols, "Stocks"),
-  ]);
-
-  const quotes = settled
-    .filter((r) => r.status === "fulfilled")
-    .flatMap((r) => r.value);
-
-  if (quotes.length === 0) {
-    throw new Error("Could not fetch quotes from any provider");
-  }
-
-  return quotes;
 }
 
 function groupByCategory(quotes) {
@@ -346,95 +242,6 @@ function buildWeeklyReport(quotes, weeklyStartSnapshot = {}) {
   return lines.join("\n");
 }
 
-// ─────────────────────────────────────────────
-// Price target alerts
-// ─────────────────────────────────────────────
-
-function checkPriceTargets(quotes, lastPriceTargetAlertAt, nowMs) {
-  if (!config.priceTargets || config.priceTargets.length === 0) {
-    return { alerts: [], updatedLastAlertAt: lastPriceTargetAlertAt };
-  }
-  const alerts = [];
-  const updatedLastAlertAt = { ...lastPriceTargetAlertAt };
-
-  for (const target of config.priceTargets) {
-    const item = quotes.find((q) => q.symbol === target.symbol);
-    if (!item || !Number.isFinite(item.price)) continue;
-    if (!isFreshForAlerts(item)) continue;
-
-    const triggered =
-      target.direction === "ABOVE" ? item.price > target.threshold : item.price < target.threshold;
-    if (!triggered) continue;
-
-    const cooldownKey = `${item.key}:${target.direction}:${target.threshold}`;
-    const lastMs = updatedLastAlertAt[cooldownKey]
-      ? Date.parse(updatedLastAlertAt[cooldownKey])
-      : 0;
-    if (Number.isFinite(lastMs) && nowMs - lastMs < config.alertCooldownMs) continue;
-
-    updatedLastAlertAt[cooldownKey] = new Date(nowMs).toISOString();
-    const dir = target.direction === "ABOVE" ? "went above" : "fell below";
-    alerts.push(
-      `🎯 <b>Price target reached</b>\n` +
-        `<b>${escapeHtml(item.symbol)}</b> ${dir} ${escapeHtml(formatPrice(target.threshold, item.currency))}\n` +
-        `Current price: <b>${escapeHtml(formatPrice(item.price, item.currency))}</b>`
-    );
-  }
-
-  return { alerts, updatedLastAlertAt };
-}
-
-// ─────────────────────────────────────────────
-// Market open/close alerts
-// ─────────────────────────────────────────────
-
-function isTimeInWindow(h, m, targetH, targetM, windowMin) {
-  const current = h * 60 + m;
-  const target = targetH * 60 + targetM;
-  return current >= target && current < target + windowMin;
-}
-
-function checkMarketSchedule(state, quotes, nowMs) {
-  const now = new Date(nowMs);
-  const h = now.getHours();
-  const m = now.getMinutes();
-  const today = getTodayLocalDate();
-  const windowMin = Math.ceil(config.checkIntervalMs / 60000);
-  const alerts = [];
-
-  if (
-    isTimeInWindow(h, m, config.marketOpenHour, config.marketOpenMinute, windowMin) &&
-    state.lastMarketOpenAlertDate !== today
-  ) {
-    state.lastMarketOpenAlertDate = today;
-    const avg = average24hChange(quotes);
-    const emoji = Number.isFinite(avg) && avg > 0 ? "🟢" : Number.isFinite(avg) && avg < 0 ? "🔴" : "🟡";
-    alerts.push(
-      `🔔 <b>Market open</b>\n` +
-        `${emoji} Average 24h bias: <b>${escapeHtml(formatPercent(avg))}</b>\n` +
-        `Monitoring every ${windowMin} minutes.`
-    );
-  }
-
-  if (
-    isTimeInWindow(h, m, config.marketCloseHour, config.marketCloseMinute, windowMin) &&
-    state.lastMarketCloseAlertDate !== today
-  ) {
-    state.lastMarketCloseAlertDate = today;
-    const sorted = [...quotes]
-      .filter((q) => Number.isFinite(q.change24hPct))
-      .sort((a, b) => b.change24hPct - a.change24hPct);
-    const top = sorted[0];
-    const bot = sorted[sorted.length - 1];
-    let detail = "";
-    if (top) detail += `\nBest of the day: <b>${escapeHtml(top.symbol)}</b> ${escapeHtml(formatPercent(top.change24hPct))}`;
-    if (bot && bot !== top) detail += `\nWorst of the day: <b>${escapeHtml(bot.symbol)}</b> ${escapeHtml(formatPercent(bot.change24hPct))}`;
-    alerts.push(`🔕 <b>Market close</b>${detail}`);
-  }
-
-  return alerts;
-}
-
 function buildSnapshot(quotes) {
   const snapshot = {};
   for (const item of quotes) {
@@ -454,86 +261,6 @@ function buildSnapshot(quotes) {
     };
   }
   return snapshot;
-}
-
-function getSignificantChanges(quotes, previousSnapshot, lastAlertAt, priceHistory) {
-  const alerts = [];
-  const updatedLastAlertAt = { ...lastAlertAt };
-  const nowMs = Date.now();
-
-  for (const item of quotes) {
-    if (!isFreshForAlerts(item)) continue;
-
-    const prev = previousSnapshot[item.key];
-    if (!prev || !Number.isFinite(prev.price) || prev.price === 0) continue;
-
-    const deltaPct = ((item.price - prev.price) / prev.price) * 100;
-    const absDeltaPct = Math.abs(deltaPct);
-    const categoryType = getCategoryType(item.category);
-    const warningThreshold = config.thresholds[categoryType].warning;
-    if (absDeltaPct < warningThreshold) continue;
-
-    const lastAlertMs = updatedLastAlertAt[item.key]
-      ? Date.parse(updatedLastAlertAt[item.key])
-      : 0;
-
-    if (Number.isFinite(lastAlertMs) && nowMs - lastAlertMs < config.alertCooldownMs) {
-      continue;
-    }
-
-    updatedLastAlertAt[item.key] = new Date(nowMs).toISOString();
-
-    const accumulatedChangePct = calculateAccumulatedChangePct(
-      priceHistory[item.key],
-      item.price,
-      nowMs
-    );
-
-    const level = getAlertLevel(absDeltaPct, categoryType);
-
-    alerts.push({
-      symbol: item.symbol,
-      category: item.category,
-      currentPrice: item.price,
-      previousPrice: prev.price,
-      name: item.name || item.symbol,
-      currency: item.currency,
-      deltaPct,
-      change24hPct: item.change24hPct,
-      accumulatedChangePct,
-      volume: item.volume,
-      level,
-    });
-  }
-
-  return {
-    alerts,
-    updatedLastAlertAt,
-  };
-}
-
-function buildAlertMessage(alert) {
-  const direction = alert.deltaPct >= 0 ? "went up" : "went down";
-  const absDelta = Math.abs(alert.deltaPct);
-  const displayName =
-    alert.name && alert.name !== alert.symbol
-      ? `<b>${escapeHtml(alert.symbol)}</b> <i>${escapeHtml(alert.name)}</i>`
-      : `<b>${escapeHtml(alert.symbol)}</b>`;
-
-  const lines = [
-    `${alert.level.emoji} <b>${escapeHtml(alert.level.label)}</b> — ${escapeHtml(alert.category)}`,
-    `${displayName} ${direction} <b>${absDelta.toFixed(2)}%</b> since the last check`,
-    `Before: ${escapeHtml(formatPrice(alert.previousPrice, alert.currency))} → Now: <b>${escapeHtml(formatPrice(alert.currentPrice, alert.currency))}</b>`,
-    `24h: <b>${escapeHtml(formatPercent(alert.change24hPct))}</b>  |  Vol: ${escapeHtml(formatVolume(alert.volume))}`,
-  ];
-
-  if (Number.isFinite(alert.accumulatedChangePct)) {
-    lines.push(
-      `Accumulated ${Math.round(config.accumulatedChangeWindowMs / 60000)}min: <b>${escapeHtml(formatPercent(alert.accumulatedChangePct))}</b>`
-    );
-  }
-
-  return lines.join("\n");
 }
 
 async function runCycle(state, options = { isStartup: false }) {
@@ -568,7 +295,7 @@ async function runCycle(state, options = { isStartup: false }) {
   const updatedPriceHistory = updatePriceHistory(state.priceHistory || {}, quotes, nowMs);
 
   // Market schedule alerts
-  const scheduleAlerts = checkMarketSchedule(state, freshQuotes, nowMs);
+  const scheduleAlerts = checkMarketSchedule(state, freshQuotes, nowMs, getTodayLocalDate);
   for (const text of scheduleAlerts) {
     await sendTelegramMessage(text, { parseMode: "HTML" });
   }

@@ -81,6 +81,11 @@ const config = {
     process.env.TELEGRAM_LONG_POLLING_TIMEOUT_SECONDS,
     25
   ),
+  telegramLongPollingGraceSeconds: parseNumber(
+    process.env.TELEGRAM_LONG_POLLING_GRACE_SECONDS,
+    5
+  ),
+  telegramUpdatesLimit: parseNumber(process.env.TELEGRAM_UPDATES_LIMIT, 10),
   maxQuoteAgeMinutes: parseNumber(process.env.MAX_QUOTE_AGE_MINUTES, 120),
   requestTimeoutMs: 15000,
 };
@@ -136,6 +141,17 @@ function validateConfig() {
 
   if (config.commandPollIntervalMs <= 0) {
     throw new Error("COMMAND_POLL_INTERVAL_SECONDS must be greater than 0");
+  }
+
+  if (
+    !Number.isFinite(config.telegramLongPollingGraceSeconds) ||
+    config.telegramLongPollingGraceSeconds < 0
+  ) {
+    throw new Error("TELEGRAM_LONG_POLLING_GRACE_SECONDS must be 0 or greater");
+  }
+
+  if (!Number.isFinite(config.telegramUpdatesLimit) || config.telegramUpdatesLimit <= 0) {
+    throw new Error("TELEGRAM_UPDATES_LIMIT must be greater than 0");
   }
 
   if (!Number.isFinite(config.maxQuoteAgeMinutes) || config.maxQuoteAgeMinutes <= 0) {

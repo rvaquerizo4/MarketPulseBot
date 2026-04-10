@@ -438,7 +438,8 @@ function htmlPage() {
     } else {
       for (const ev of recent) {
         const li = document.createElement("li");
-        const when = ev.ts ? new Date(ev.ts).toLocaleString() : "N/D";
+        const eventAt = ev.at || ev.ts || null;
+        const when = eventAt ? new Date(eventAt).toLocaleString() : "N/D";
         li.textContent = "[" + when + "] " + (ev.message || ev.type || "event");
         events.appendChild(li);
       }

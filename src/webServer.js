@@ -1,6 +1,11 @@
 const http = require("node:http");
 const { config } = require("./config");
 const { logger } = require("./utils/logger");
+const {
+  getEditableSettings,
+  setEditableSetting,
+  resetEditableSetting,
+} = require("./runtimeConfig");
 
 function safePercent(value) {
   if (!Number.isFinite(value)) return "N/D";
@@ -269,12 +274,189 @@ function htmlPage() {
       font-size: 0.84rem;
       text-align: right;
     }
+    .config-controls {
+      display: grid;
+      grid-template-columns: 1.4fr 2fr auto auto;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .config-controls select,
+    .config-controls input {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.9rem;
+      background: #fff;
+      color: var(--text);
+    }
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 8px 11px;
+      font-size: 0.86rem;
+      cursor: pointer;
+      font-weight: 650;
+    }
+    .btn-primary {
+      background: #e7f2fa;
+      border-color: #bbd8ed;
+      color: #0f4d78;
+    }
+    .btn-secondary {
+      background: #f3f5f8;
+      border-color: #d7e0e8;
+      color: #3c4f5f;
+    }
+    .config-status {
+      color: var(--muted);
+      font-size: 0.84rem;
+      margin-bottom: 8px;
+      min-height: 1.1rem;
+    }
+    .config-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      font-size: 0.85rem;
+    }
+    .config-item {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px;
+      background: #fbfeff;
+    }
+    .config-item .key {
+      font-weight: 700;
+      font-size: 0.78rem;
+      color: #27455d;
+      margin-bottom: 4px;
+    }
+    .config-item .value {
+      font-family: Consolas, Menlo, monospace;
+      font-size: 0.78rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .runtime-flag {
+      color: #956200;
+      font-size: 0.74rem;
+      margin-top: 3px;
+    }
+    .config-help {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .quick-picks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .quick-btn {
+      border: 1px solid #d7e0e8;
+      background: #f7fbfd;
+      color: #234258;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 4px 9px;
+      cursor: pointer;
+    }
+    .config-content {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr);
+      gap: 14px;
+      margin-top: 10px;
+    }
+    .config-left {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: #fbfeff;
+    }
+    .config-right {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: #f9fcfe;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .config-list-title {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #27455d;
+      margin-bottom: 8px;
+    }
+    .config-list-wrap {
+      overflow: auto;
+      max-height: 56vh;
+      padding-right: 4px;
+      min-width: 0;
+    }
+    .config-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(16, 30, 45, 0.45);
+      padding: 18px;
+      align-items: center;
+      justify-content: center;
+    }
+    .config-modal.open {
+      display: flex;
+    }
+    .config-modal-body {
+      width: min(1240px, 98vw);
+      max-height: 92vh;
+      overflow: auto;
+    }
+    .config-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .config-close {
+      border: 1px solid #d7e0e8;
+      background: #fff;
+      color: #3c4f5f;
+      border-radius: 8px;
+      padding: 4px 8px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
     @media (max-width: 720px) {
       .wrap { padding: 14px; }
       .top { align-items: flex-start; flex-direction: column; }
       .chip-group { width: 100%; justify-content: flex-start; }
       .card { padding: 12px; }
       .footer { text-align: left; }
+      .config-controls {
+        grid-template-columns: 1fr;
+      }
+      .config-content {
+        grid-template-columns: 1fr;
+      }
+      .config-right {
+        min-height: 240px;
+      }
+      .config-list-wrap {
+        max-height: 36vh;
+      }
+      .config-modal {
+        padding: 10px;
+      }
+      .config-modal-body {
+        max-height: 94vh;
+      }
     }
   </style>
 </head>
@@ -288,6 +470,7 @@ function htmlPage() {
       <div class="chip-group">
         <span class="tag">Live Panel</span>
         <span class="tag">Port 1903</span>
+        <button id="cfg-toggle" class="btn btn-secondary" onclick="toggleConfigPanel()">Configuracion</button>
       </div>
     </div>
 
@@ -306,6 +489,41 @@ function htmlPage() {
     </div>
 
     <div class="footer">Auto refresh every 30 seconds.</div>
+  </div>
+
+  <div id="config-modal" class="config-modal" onclick="handleConfigBackdrop(event)">
+    <div class="config-modal-body card">
+      <div class="config-header">
+        <h3 style="margin:0">Configuracion Rapida</h3>
+        <button class="config-close" onclick="toggleConfigPanel(false)">Cerrar</button>
+      </div>
+      <div class="config-content">
+        <div class="config-left">
+          <div class="config-help">1) Elige que quieres cambiar, 2) escribe el valor, 3) pulsa Guardar.</div>
+          <div class="quick-picks">
+            <button class="quick-btn" onclick="focusKey('CHECK_INTERVAL_MINUTES')">Intervalo</button>
+            <button class="quick-btn" onclick="focusKey('ETF_SYMBOLS')">ETFs</button>
+            <button class="quick-btn" onclick="focusKey('INDEX_FUND_SYMBOLS')">Indices</button>
+            <button class="quick-btn" onclick="focusKey('STOCK_SYMBOLS')">Acciones</button>
+            <button class="quick-btn" onclick="focusKey('PRICE_TARGETS')">Objetivos</button>
+          </div>
+          <div class="config-controls">
+            <select id="cfg-key"></select>
+            <input id="cfg-value" placeholder="Nuevo valor" />
+            <button class="btn btn-primary" onclick="saveConfig()">Guardar</button>
+            <button class="btn btn-secondary" onclick="unsetConfig()">Restaurar</button>
+          </div>
+          <div id="cfg-status" class="config-status"></div>
+          <div id="cfg-example" class="config-help"></div>
+        </div>
+        <div class="config-right">
+          <div class="config-list-title">Variables actuales</div>
+          <div class="config-list-wrap">
+            <div id="cfg-list" class="config-grid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -518,9 +736,194 @@ function htmlPage() {
       "<polyline points='" + pts + "' fill='none' stroke='" + color + "' stroke-width='1.5' stroke-linejoin='round' stroke-linecap='round'/>" +
       "</svg>";
   }
+
+  function configStatus(text, isError) {
+    var el = document.getElementById("cfg-status");
+    el.textContent = text || "";
+    el.style.color = isError ? "#ba2f2f" : "#5d7289";
+  }
+
+  function toggleConfigPanel(forceOpen) {
+    var panel = document.getElementById("config-modal");
+    var btn = document.getElementById("cfg-toggle");
+    if (!panel || !btn) return;
+
+    var shouldOpen =
+      typeof forceOpen === "boolean" ? forceOpen : !panel.classList.contains("open");
+
+    if (shouldOpen) {
+      panel.classList.add("open");
+      document.body.style.overflow = "hidden";
+      btn.textContent = "Configuracion (abierta)";
+    } else {
+      panel.classList.remove("open");
+      document.body.style.overflow = "";
+      btn.textContent = "Configuracion";
+    }
+  }
+
+  function handleConfigBackdrop(event) {
+    if (event.target && event.target.id === "config-modal") {
+      toggleConfigPanel(false);
+    }
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      toggleConfigPanel(false);
+    }
+  });
+
+  var keyMeta = {
+    CHECK_INTERVAL_MINUTES: { label: "Intervalo de revision (min)", example: "Ejemplo: 3" },
+    CRYPTO_IDS: { label: "Cryptos (CoinGecko IDs)", example: "Ejemplo: bitcoin,ethereum" },
+    ETF_SYMBOLS: { label: "ETFs", example: "Ejemplo: GLD,SLV,BNO" },
+    INDEX_FUND_SYMBOLS: { label: "Indices / Index Funds", example: "Ejemplo: IVV,URTH,IEUR,EEM" },
+    STOCK_SYMBOLS: { label: "Acciones", example: "Ejemplo: SAN,AAPL,MSFT" },
+    PRICE_TARGETS: { label: "Objetivos de precio", example: "Ejemplo: BTC:ABOVE:95000,GLD:BELOW:400" },
+    MAX_QUOTE_AGE_MINUTES: { label: "Minutos maximos para considerar dato fresco", example: "Ejemplo: 480" },
+    ALERT_COOLDOWN_MINUTES: { label: "Cooldown entre alertas (min)", example: "Ejemplo: 60" },
+  };
+
+  function metaForKey(key) {
+    return keyMeta[key] || { label: key, example: "" };
+  }
+
+  function applySelectedSetting(settings) {
+    var keySelect = document.getElementById("cfg-key");
+    var selected = settings.find(function (s) { return s.key === keySelect.value; });
+    document.getElementById("cfg-value").value = selected ? (selected.value || "") : "";
+    configStatus(selected && selected.description ? selected.description : "", false);
+    var m = metaForKey(keySelect.value);
+    document.getElementById("cfg-example").textContent =
+      (m.label ? ("Campo: " + m.label + ". ") : "") + (m.example || "");
+  }
+
+  function focusKey(key) {
+    var keySelect = document.getElementById("cfg-key");
+    if (!keySelect) return;
+    keySelect.value = key;
+    if (window.__cfgSettings) {
+      applySelectedSetting(window.__cfgSettings);
+    }
+  }
+
+  function renderConfig(data) {
+    var settings = Array.isArray(data.settings) ? data.settings : [];
+    window.__cfgSettings = settings;
+    var keySelect = document.getElementById("cfg-key");
+    var list = document.getElementById("cfg-list");
+
+    keySelect.innerHTML = "";
+    list.innerHTML = "";
+
+    for (var i = 0; i < settings.length; i++) {
+      var item = settings[i];
+      var opt = document.createElement("option");
+      opt.value = item.key;
+      opt.textContent = metaForKey(item.key).label + " (" + item.key + ")";
+      keySelect.appendChild(opt);
+
+      var card = document.createElement("div");
+      card.className = "config-item";
+      card.innerHTML = "<div class='key'>" + metaForKey(item.key).label + " (" + item.key + ")</div>" +
+        "<div class='value' title='" + (item.value || "") + "'>" + (item.value || "") + "</div>" +
+        (item.overridden ? "<div class='runtime-flag'>runtime override</div>" : "");
+      list.appendChild(card);
+    }
+
+    keySelect.onchange = function () {
+      applySelectedSetting(settings);
+    };
+
+    var preferredOrder = [
+      "CHECK_INTERVAL_MINUTES",
+      "CRYPTO_IDS",
+      "ETF_SYMBOLS",
+      "INDEX_FUND_SYMBOLS",
+      "STOCK_SYMBOLS",
+      "PRICE_TARGETS",
+    ];
+
+    if (settings.length > 0) {
+      var first = preferredOrder.find(function (k) {
+        return settings.some(function (s) { return s.key === k; });
+      }) || settings[0].key;
+      keySelect.value = first;
+      applySelectedSetting(settings);
+    }
+  }
+
+  async function refreshConfig() {
+    const res = await fetch("/api/config");
+    if (!res.ok) throw new Error("No se pudo cargar config");
+    const data = await res.json();
+    renderConfig(data);
+  }
+
+  async function saveConfig() {
+    const key = document.getElementById("cfg-key").value;
+    const value = document.getElementById("cfg-value").value;
+    const res = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, value }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      configStatus(data.error || "Error guardando", true);
+      return;
+    }
+    configStatus("Guardado: " + key + "=" + (data.value || ""), false);
+    await refreshConfig();
+  }
+
+  async function unsetConfig() {
+    const key = document.getElementById("cfg-key").value;
+    const res = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, unset: true }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      configStatus(data.error || "Error restaurando", true);
+      return;
+    }
+    configStatus("Restaurado desde .env: " + key, false);
+    await refreshConfig();
+  }
+
+  refreshConfig().catch(function () {
+    configStatus("No se pudo cargar la configuracion", true);
+  });
 </script>
 </body>
 </html>`;
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+      if (raw.length > 1024 * 1024) {
+        reject(new Error("Request body too large"));
+      }
+    });
+    req.on("end", () => {
+      if (!raw.trim()) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        reject(new Error("Invalid JSON body"));
+      }
+    });
+    req.on("error", reject);
+  });
 }
 
 function startWebServer(state) {
@@ -540,6 +943,37 @@ function startWebServer(state) {
         "Cache-Control": "no-store",
       });
       res.end(JSON.stringify(data));
+      return;
+    }
+
+    if (url === "/api/config" && req.method === "GET") {
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify({ settings: getEditableSettings() }));
+      return;
+    }
+
+    if (url === "/api/config" && req.method === "POST") {
+      readJsonBody(req)
+        .then(async (payload) => {
+          const key = String(payload.key || "").toUpperCase();
+          if (!key) {
+            throw new Error("Missing key");
+          }
+
+          const result = payload.unset
+            ? await resetEditableSetting(key)
+            : await setEditableSetting(key, String(payload.value || ""));
+
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(result));
+        })
+        .catch((error) => {
+          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: error.message }));
+        });
       return;
     }
 

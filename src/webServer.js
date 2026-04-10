@@ -366,10 +366,10 @@ function htmlPage() {
       "<th>Symbol</th>" +
       "<th>Name</th>" +
       "<th>Category</th>" +
-      "<th>Price</th>" +
-      "<th>24h</th>" +
-      "<th>Trend</th>" +
-      "<th>Status</th>" +
+      "<th style='text-align:right'>Price</th>" +
+      "<th style='text-align:center'>24h</th>" +
+      "<th style='text-align:center'>Trend</th>" +
+      "<th style='text-align:right'>Status</th>" +
       "</tr>" +
       "</thead>" +
       "<tbody></tbody>";
@@ -458,18 +458,41 @@ function htmlPage() {
 
   function getFreshnessInfo(item) {
     var ms = item.marketState ? String(item.marketState).toUpperCase() : "";
-    // Crypto has no market hours — use simple fresh/stale
-    if (!ms || ms === "REGULAR") {
+    var isCrypto = item.category === "Crypto";
+
+    function fmtLastTrade() {
+      if (!item.lastTradeAt) return "";
+      var d = new Date(item.lastTradeAt);
+      var now = new Date();
+      var timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      if (d.toDateString() !== now.toDateString()) {
+        var dateStr = d.toLocaleDateString([], { month: "short", day: "numeric" });
+        return " " + dateStr + " " + timeStr;
+      }
+      return " " + timeStr;
+    }
+
+    // Crypto or market actively REGULAR → use classic fresh/stale
+    if (isCrypto || ms === "REGULAR") {
       if (item.isStale) {
         var age = Number.isFinite(item.ageMinutes) ? " (" + item.ageMinutes.toFixed(0) + "m)" : "";
         return { cls: "stale", text: "stale" + age };
       }
       return { cls: "fresh", text: "fresh" };
     }
-    // Market is closed / pre / post
-    var label = ms === "PRE" ? "pre-market" : ms === "POST" ? "after-hours" : "closed";
-    var ageStr = Number.isFinite(item.ageMinutes) ? " (" + item.ageMinutes.toFixed(0) + "m)" : "";
-    return { cls: "closed", text: label + ageStr };
+
+    // Explicit closed / pre / post
+    if (ms === "CLOSED" || ms === "PRE" || ms === "POST") {
+      var label = ms === "PRE" ? "pre-market" : ms === "POST" ? "after-hours" : "closed";
+      return { cls: "closed", text: label + fmtLastTrade() };
+    }
+
+    // marketState unknown but non-crypto and stale → infer closed
+    if (item.isStale) {
+      return { cls: "closed", text: "closed" + fmtLastTrade() };
+    }
+
+    return { cls: "fresh", text: "fresh" };
   }
 
   function renderSparkline(prices, change24hPct) {

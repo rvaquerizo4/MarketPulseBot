@@ -14,6 +14,7 @@ It runs in the background, tracks crypto, ETFs, index funds, and individual stoc
 - Market open/close summary alerts.
 - RSI(14) on report lines when enough history is available.
 - Telegram commands for on-demand queries.
+- Browser dashboard on `http://localhost:1903`.
 - Historical CSV output for analysis.
 - Windows startup automation via Scheduled Tasks.
 
@@ -108,6 +109,24 @@ API_RETRY_ATTEMPTS=3
 API_RETRY_BASE_DELAY_MS=500
 API_RETRY_BACKOFF_MULTIPLIER=2
 API_RETRY_MAX_DELAY_MS=4000
+
+# Web dashboard
+WEB_ENABLED=true
+WEB_PORT=1903
+```
+
+## Web Dashboard
+
+The app also starts a lightweight web dashboard by default:
+
+```text
+http://localhost:1903
+```
+
+You can disable it with:
+
+```env
+WEB_ENABLED=false
 ```
 
 ## Telegram Commands

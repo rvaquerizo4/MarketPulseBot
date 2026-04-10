@@ -22,11 +22,21 @@ function recordEvent(state, event, limit) {
 }
 
 function buildEventFromAlert(alert) {
+  const movement =
+    Number.isFinite(alert.deltaPct) && alert.deltaPct > 0
+      ? "subio"
+      : Number.isFinite(alert.deltaPct) && alert.deltaPct < 0
+        ? "bajo"
+        : "se mantuvo";
+
   return {
     type: "price-alert",
     severity: alert.level?.key || "warning",
     title: `${alert.level?.label || "Alert"} ${alert.symbol}`,
-    message: `${formatPercent(alert.deltaPct)} vs previous check | ${formatPrice(alert.currentPrice, alert.currency)}`,
+    message:
+      movement === "se mantuvo"
+        ? `${alert.symbol} se mantuvo (${formatPercent(alert.deltaPct)}) vs previous check | ${formatPrice(alert.currentPrice, alert.currency)}`
+        : `${alert.symbol} ${movement} ${formatPercent(alert.deltaPct)} vs previous check | ${formatPrice(alert.currentPrice, alert.currency)}`,
     symbol: alert.symbol,
   };
 }

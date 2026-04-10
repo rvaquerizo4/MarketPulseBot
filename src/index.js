@@ -3,6 +3,7 @@ const { loadState, saveState } = require("./stateStore");
 const { runCycle, buildDailyReport, fetchAllQuotes } = require("./marketMonitor");
 const { sendTelegramMessage } = require("./telegram");
 const { pollAndHandle } = require("./telegramCommands");
+const { startWebServer } = require("./webServer");
 const { logger } = require("./utils/logger");
 
 let cycleRunning = false;
@@ -48,6 +49,10 @@ async function safeRunCycle(state, options) {
 async function main() {
   validateConfig();
   const state = await loadState();
+
+  if (config.webEnabled) {
+    startWebServer(state);
+  }
 
   logger.info("Starting market monitor...");
   await safeRunCycle(state, { isStartup: true });

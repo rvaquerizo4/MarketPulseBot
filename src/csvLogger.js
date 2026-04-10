@@ -1,6 +1,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { logger } = require("./utils/logger");
+const { config } = require("./config");
 
 const CSV_FILE = path.join(process.cwd(), "data", "history.csv");
 const CSV_HEADER =
@@ -42,4 +43,31 @@ async function appendToCsv(quotes) {
   }
 }
 
-module.exports = { appendToCsv };
+async function rotateCsv() {
+  const date = new Date().toISOString().slice(0, 10);
+  const dir = path.dirname(CSV_FILE);
+  const archiveName = `history.${date}.csv`;
+  const archivePath = path.join(dir, archiveName);
+  try {
+    await fs.rename(CSV_FILE, archivePath);
+    await fs.writeFile(CSV_FILE, CSV_HEADER, "utf8");
+    logger.info(`[CSV Logger] Rotated history.csv → ${archiveName}`);
+  } catch (err) {
+    logger.error(`[CSV Logger] Rotation error: ${err.message}`);
+  }
+}
+
+async function rotateIfNeeded() {
+  try {
+    const stat = await fs.stat(CSV_FILE);
+    const sizeMb = stat.size / (1024 * 1024);
+    if (sizeMb >= config.maxCsvSizeMb) {
+      logger.warn(`[CSV Logger] history.csv is ${sizeMb.toFixed(1)} MB — rotating`);
+      await rotateCsv();
+    }
+  } catch {
+    // file does not exist yet, nothing to rotate
+  }
+}
+
+module.exports = { appendToCsv, rotateIfNeeded };

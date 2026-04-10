@@ -98,6 +98,9 @@ const config = {
   ),
   apiRetryMaxDelayMs: parseNumber(process.env.API_RETRY_MAX_DELAY_MS, 4000),
   requestTimeoutMs: 15000,
+  webEnabled: (process.env.WEB_ENABLED || "true").toLowerCase() !== "false",
+  webPort: parseNumber(process.env.WEB_PORT, 1903),
+  maxCsvSizeMb: parseNumber(process.env.MAX_CSV_SIZE_MB, 20),
 };
 
 function validateConfig() {
@@ -116,6 +119,10 @@ function validateConfig() {
 
   if (config.checkIntervalMs <= 0) {
     throw new Error("CHECK_INTERVAL_MINUTES must be greater than 0");
+  }
+
+  if (!Number.isFinite(config.webPort) || config.webPort <= 0 || config.webPort > 65535) {
+    throw new Error("WEB_PORT must be between 1 and 65535");
   }
 
   const groups = ["crypto", "etf", "index", "stock"];

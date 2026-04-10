@@ -1,7 +1,7 @@
 const { config } = require("./config");
 const { sendTelegramMessage } = require("./telegram");
 const { calculateRSI, rsiEmoji, rsiLabel } = require("./rsi");
-const { appendToCsv } = require("./csvLogger");
+const { appendToCsv, rotateIfNeeded } = require("./csvLogger");
 const { fetchAllQuotes } = require("./api/quotes");
 const {
   isFreshForAlerts,
@@ -86,18 +86,13 @@ function buildDailyReport(quotes, yesterdaySnapshot = {}, priceHistory = {}, rec
   const today = getTodayLocalDate();
   const grouped = groupByCategory(quotes);
   const rankingBase = quotes.filter((q) => isFreshForAlerts(q));
-  const sortedByChange = [...rankingBase].sort((a, b) => {
-    const av = Number.isFinite(a.change24hPct) ? a.change24hPct : -Infinity;
-    const bv = Number.isFinite(b.change24hPct) ? b.change24hPct : -Infinity;
-    return bv - av;
-  });
-  const topWinners = sortedByChange.slice(0, 3);
-  const topLosers = [...sortedByChange]
-    .sort((a, b) => {
-      const av = Number.isFinite(a.change24hPct) ? a.change24hPct : Infinity;
-      const bv = Number.isFinite(b.change24hPct) ? b.change24hPct : Infinity;
-      return av - bv;
-    })
+  const topWinners = [...rankingBase]
+    .filter((q) => Number.isFinite(q.change24hPct) && q.change24hPct > 0)
+    .sort((a, b) => b.change24hPct - a.change24hPct)
+    .slice(0, 3);
+  const topLosers = [...rankingBase]
+    .filter((q) => Number.isFinite(q.change24hPct) && q.change24hPct < 0)
+    .sort((a, b) => a.change24hPct - b.change24hPct)
     .slice(0, 3);
 
   const upCount = quotes.filter((q) => Number.isFinite(q.change24hPct) && q.change24hPct > 0.2).length;
@@ -120,20 +115,24 @@ function buildDailyReport(quotes, yesterdaySnapshot = {}, priceHistory = {}, rec
     `🟢 Up: <b>${upCount}</b>  |  🔴 Down: <b>${downCount}</b>  |  🟡 Flat: <b>${flatCount}</b>`,
     "",
     "<b>🏆 Top Gainers (24h)</b>",
-    ...topWinners.map(
-      (item, idx) =>
-        `${idx + 1}. ${trendIcon(item.change24hPct)} <b>${escapeHtml(item.symbol)}</b> <i>${escapeHtml(item.name || item.symbol)}</i> ${escapeHtml(
-          formatPercent(item.change24hPct)
-        )}`
-    ),
+    ...(topWinners.length > 0
+      ? topWinners.map(
+          (item, idx) =>
+            `${idx + 1}. ${trendIcon(item.change24hPct)} <b>${escapeHtml(item.symbol)}</b> <i>${escapeHtml(item.name || item.symbol)}</i> ${escapeHtml(
+              formatPercent(item.change24hPct)
+            )}`
+        )
+      : ["No assets with positive 24h change in fresh data."]),
     "",
     "<b>⚠️ Top Losers (24h)</b>",
-    ...topLosers.map(
-      (item, idx) =>
-        `${idx + 1}. ${trendIcon(item.change24hPct)} <b>${escapeHtml(item.symbol)}</b> <i>${escapeHtml(item.name || item.symbol)}</i> ${escapeHtml(
-          formatPercent(item.change24hPct)
-        )}`
-    ),
+    ...(topLosers.length > 0
+      ? topLosers.map(
+          (item, idx) =>
+            `${idx + 1}. ${trendIcon(item.change24hPct)} <b>${escapeHtml(item.symbol)}</b> <i>${escapeHtml(item.name || item.symbol)}</i> ${escapeHtml(
+              formatPercent(item.change24hPct)
+            )}`
+        )
+      : ["No assets with negative 24h change in fresh data."]),
     "",
   ];
 
@@ -277,6 +276,7 @@ function buildSnapshot(quotes) {
 
 async function runCycle(state, options = { isStartup: false }) {
   const nowMs = Date.now();
+  await rotateIfNeeded();
   const quotes = await fetchAllQuotes();
   const freshQuotes = quotes.filter((q) => isFreshForAlerts(q));
   const today = getTodayLocalDate();

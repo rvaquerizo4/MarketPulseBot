@@ -485,20 +485,30 @@ function htmlPage() {
     <div class="top">
       <div>
         <div class="title">MarketPulseBot Dashboard</div>
-        <div id="meta" class="meta">Loading...</div>
       </div>
       <div class="chip-group">
         <span class="tag">Live Panel</span>
-        <span class="tag">Port 1903</span>
         <button id="cfg-toggle" class="btn btn-secondary" onclick="toggleConfigPanel()">Configuracion</button>
+        <button id="news-btn" class="btn btn-primary" style="margin-left:6px;">Noticias</button>
       </div>
     </div>
+
 
     <div class="grid">
       <div class="card"><div class="meta">Tracked Assets</div><div id="tracked" class="kpi">-</div></div>
       <div class="card"><div class="meta">Average 24h Bias</div><div id="avg" class="kpi">-</div></div>
       <div class="card"><div class="meta">Top Gainers</div><ul id="gainers"></ul></div>
       <div class="card"><div class="meta">Top Losers</div><ul id="losers"></ul></div>
+    </div>
+
+    <div id="news-modal" class="config-modal" style="z-index:100;">
+      <div class="config-modal-body card" style="max-width:600px;">
+        <div class="config-header">
+          <h3 style="margin:0">Noticias recientes</h3>
+          <button class="config-close" onclick="toggleNewsModal(false)">Cerrar</button>
+        </div>
+        <div id="news-list">Cargando noticias...</div>
+      </div>
     </div>
 
     <div id="tables"></div>
@@ -639,50 +649,109 @@ function htmlPage() {
     const res = await fetch("/api/dashboard");
     if (!res.ok) return;
     const data = await res.json();
+    window.dashboardData = data;
+    renderDashboard(data);
+  }
 
-    const checkedAt = data.lastCheckAt ? new Date(data.lastCheckAt).toLocaleString() : "N/D";
-    const now = data.now ? new Date(data.now).toLocaleString() : "N/D";
 
-    document.getElementById("meta").textContent = "Last bot check: " + checkedAt + " | Panel refresh: " + now;
-    document.getElementById("tracked").textContent = String(data.trackedAssets || 0);
-
-    const avgEl = document.getElementById("avg");
-    avgEl.textContent = data.avg24hLabel || "N/D";
-    avgEl.className = "kpi " + clsPct(data.avg24h);
-
-    setList(document.getElementById("gainers"), data.topGainers, "No positive movers");
-    setList(document.getElementById("losers"), data.topLosers, "No negative movers");
-
-    const tables = document.getElementById("tables");
-    tables.innerHTML = "";
-    const categories = data.categories || {};
-    const preferredOrder = ["Crypto", "ETF", "Index Fund", "Stocks"];
-    for (const category of preferredOrder) {
-      if (Array.isArray(categories[category])) {
-        tables.appendChild(renderCategoryTable(category, categories[category]));
+  function refreshNews() {
+    var newsList = document.getElementById("news-list");
+    newsList.textContent = "Cargando noticias...";
+    try {
+      var symbol = null;
+      if (window.dashboardData && window.dashboardData.categories) {
+        var cats = Object.values(window.dashboardData.categories);
+        for (var i = 0; i < cats.length; i++) {
+          var arr = cats[i];
+          if (Array.isArray(arr) && arr.length > 0 && arr[0].symbol) {
+            symbol = arr[0].symbol;
+            break;
+          }
+        }
       }
-    }
-    for (const [category, rows] of Object.entries(categories)) {
-      if (!preferredOrder.includes(category)) {
-        tables.appendChild(renderCategoryTable(category, rows));
+      if (!symbol) {
+        newsList.textContent = "No hay símbolos para mostrar noticias.";
+        return;
       }
+      fetch('/api/news?symbol=' + encodeURIComponent(symbol))
+        .then(function(res) {
+          if (!res.ok) return res.json().then(function(err) { throw err; }).catch(function() { throw new Error('Error al cargar noticias.'); });
+          return res.json();
+        })
+        .then(function(data) {
+          if (!data.articles || data.articles.length === 0) {
+            newsList.textContent = "No hay noticias recientes.";
+            return;
+          }
+          newsList.innerHTML = "";
+          for (var j = 0; j < data.articles.length; j++) {
+            var article = data.articles[j];
+            var div = document.createElement("div");
+            div.className = "news-item";
+            div.innerHTML =
+              '<a href="' + article.url + '" target="_blank" rel="noopener" style="font-weight:600;text-decoration:none;color:#156ea8">' + article.title + '</a><br>' +
+              '<span style="color:#5d7289;font-size:0.92em">' + (article.source && article.source.name ? article.source.name : "") + (article.publishedAt ? ' — ' + new Date(article.publishedAt).toLocaleString() : "") + '</span>' +
+              (article.description ? '<div style="margin:4px 0 8px 0;font-size:0.97em;color:#234258">' + article.description + '</div>' : "");
+            newsList.appendChild(div);
+          }
+        })
+        .catch(function(err) {
+          newsList.textContent = (err && err.error) ? err.error : "Error al cargar noticias.";
+        });
+    } catch (err) {
+      newsList.textContent = "Error al cargar noticias.";
     }
+  }
 
-    const events = document.getElementById("events");
-    events.innerHTML = "";
-    const recent = Array.isArray(data.recentEvents) ? data.recentEvents.slice(0, 8) : [];
-    if (recent.length === 0) {
-      const li = document.createElement("li");
-      li.textContent = "No recent events";
-      events.appendChild(li);
+  function toggleNewsModal(forceOpen) {
+    var modal = document.getElementById("news-modal");
+    if (!modal) return;
+    var shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !modal.classList.contains("open");
+    if (shouldOpen) {
+      modal.classList.add("open");
+      document.body.style.overflow = "hidden";
+      refreshNews();
     } else {
-      for (const ev of recent) {
-        const li = document.createElement("li");
-        const eventAt = ev.at || ev.ts || null;
-        const when = eventAt ? new Date(eventAt).toLocaleString() : "N/D";
-        li.textContent = "[" + when + "] " + (ev.message || ev.type || "event");
+      modal.classList.remove("open");
+      document.body.style.overflow = "";
+    }
+  }
+
+  document.getElementById("news-btn").onclick = function() { toggleNewsModal(true); };
+
+  // Cerrar modal de noticias con Escape
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      toggleNewsModal(false);
+    }
+  });
+
+  // Render principal de dashboard
+  function renderDashboard(data) {
+    document.getElementById("tracked").textContent = data.trackedAssets;
+    document.getElementById("avg").textContent = data.avg24hLabel;
+    setList(document.getElementById("gainers"), data.topGainers, "No gainers");
+    setList(document.getElementById("losers"), data.topLosers, "No losers");
+    // Render tablas por categoría
+    var tables = document.getElementById("tables");
+    tables.innerHTML = "";
+    for (var cat in data.categories) {
+      tables.appendChild(renderCategoryTable(cat, data.categories[cat]));
+    }
+    // Render eventos recientes
+    var events = document.getElementById("events");
+    events.innerHTML = "";
+    if (Array.isArray(data.recentEvents) && data.recentEvents.length > 0) {
+      for (var i = 0; i < data.recentEvents.length; i++) {
+        var ev = data.recentEvents[i];
+        var li = document.createElement("li");
+        li.textContent = (ev.title || "") + (ev.message ? (": " + ev.message) : "");
         events.appendChild(li);
       }
+    } else {
+      var li = document.createElement("li");
+      li.textContent = "No recent events.";
+      events.appendChild(li);
     }
   }
 
@@ -951,6 +1020,11 @@ function readJsonBody(req) {
 function startWebServer(state) {
   const server = http.createServer((req, res) => {
     const url = req.url || "/";
+    if (url.startsWith("/api/news")) {
+      // /api/news?symbol=XXX
+      const newsRoute = require("./api/news");
+      return newsRoute(req, res);
+    }
 
     if (url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });

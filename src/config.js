@@ -99,7 +99,7 @@ const config = {
   apiRetryMaxDelayMs: parseNumber(process.env.API_RETRY_MAX_DELAY_MS, 4000),
   requestTimeoutMs: 15000,
   webEnabled: (process.env.WEB_ENABLED || "true").toLowerCase() !== "false",
-  webPort: parseNumber(process.env.WEB_PORT, 1903),
+  webPort: parseNumber(process.env.WEB_PORT, 1904),
   maxCsvSizeMb: parseNumber(process.env.MAX_CSV_SIZE_MB, 20),
 };
 

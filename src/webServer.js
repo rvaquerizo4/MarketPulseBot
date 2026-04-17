@@ -275,10 +275,11 @@ function htmlPage() {
       text-align: right;
     }
     .config-controls {
-      display: grid;
-      grid-template-columns: 1.4fr 2fr auto auto;
+      display: flex;
+      flex-direction: column;
       gap: 8px;
       margin-bottom: 10px;
+      align-items: stretch;
     }
     .config-controls select,
     .config-controls input {
@@ -366,15 +367,20 @@ function htmlPage() {
     }
     .config-content {
       display: grid;
-      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr);
+      grid-template-columns: 1fr minmax(320px, 420px);
       gap: 14px;
       margin-top: 10px;
+      min-width: 0;
+      width: 100%;
     }
     .config-left {
       border: 1px solid var(--line);
       border-radius: 12px;
       padding: 12px;
       background: #fbfeff;
+      min-width: 0;
+      overflow: auto;
+      max-width: 100%;
     }
     .config-right {
       border: 1px solid var(--line);
@@ -385,6 +391,20 @@ function htmlPage() {
       display: flex;
       flex-direction: column;
       min-width: 0;
+      max-width: 420px;
+      width: 100%;
+      overflow: auto;
+    }
+    @media (max-width: 1100px) {
+      .config-content {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .config-left, .config-right {
+        max-width: 100%;
+        min-width: 0;
+      }
     }
     .config-list-title {
       font-size: 0.88rem;
@@ -510,8 +530,10 @@ function htmlPage() {
           <div class="config-controls">
             <select id="cfg-key"></select>
             <input id="cfg-value" placeholder="Nuevo valor" />
-            <button class="btn btn-primary" onclick="saveConfig()">Guardar</button>
-            <button class="btn btn-secondary" onclick="unsetConfig()">Restaurar</button>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-primary" onclick="saveConfig()">Guardar</button>
+              <button class="btn btn-secondary" onclick="unsetConfig()">Restaurar</button>
+            </div>
           </div>
           <div id="cfg-status" class="config-status"></div>
           <div id="cfg-example" class="config-help"></div>

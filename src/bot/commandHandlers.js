@@ -3,6 +3,12 @@ const { sendTelegramMessage } = require("../telegram");
 const { fetchYahooQuotes } = require("../providers/yahoo");
 const { formatPrice, formatPercent, escapeHtml } = require("../utils/formatters");
 const { formatRecentEvents } = require("../utils/eventHistory");
+const {
+  getEditableSettings,
+  getEditableSettingKeys,
+  setEditableSetting,
+  resetEditableSetting,
+} = require("../runtimeConfig");
 
 async function handleCommand(text, state, handlers) {
   const parts = text.trim().split(/\s+/);
@@ -113,6 +119,82 @@ async function handleCommand(text, state, handlers) {
     return;
   }
 
+  if (command === "/config") {
+    const settings = getEditableSettings();
+    const top = settings
+      .slice(0, 14)
+      .map(
+        (item) =>
+          `• <b>${escapeHtml(item.key)}</b> = <code>${escapeHtml(item.value || "")}</code>${
+            item.overridden ? " <i>(runtime)</i>" : ""
+          }`
+      )
+      .join("\n");
+    await sendTelegramMessage(
+      `<b>⚙️ Runtime Config</b>\n\n` +
+        `${top}\n\n` +
+        `<i>Usa /set KEY VALUE para cambiar y /unset KEY para restaurar desde .env.</i>`,
+      { parseMode: "HTML" }
+    );
+    return;
+  }
+
+  if (command === "/set") {
+    const match = text.match(/^\/set(?:@\w+)?\s+(\S+)\s+([\s\S]+)$/i);
+    if (!match) {
+      await sendTelegramMessage(
+        `Uso: <b>/set KEY VALUE</b>\nEjemplo: <code>/set ETF_WARNING_THRESHOLD_PERCENT 0.8</code>`,
+        { parseMode: "HTML" }
+      );
+      return;
+    }
+
+    const envKey = String(match[1] || "").toUpperCase();
+    const rawValue = String(match[2] || "").trim();
+
+    try {
+      const updated = await setEditableSetting(envKey, rawValue);
+      await sendTelegramMessage(
+        `✅ <b>${escapeHtml(updated.key)}</b> actualizado a <code>${escapeHtml(
+          updated.value
+        )}</code>\n<i>Cambio aplicado en runtime y persistido.</i>`,
+        { parseMode: "HTML" }
+      );
+    } catch (error) {
+      const validKeys = getEditableSettingKeys().slice(0, 18).join(", ");
+      await sendTelegramMessage(
+        `⚠️ No se pudo actualizar: ${escapeHtml(error.message)}\n\n` +
+          `<b>Claves soportadas (resumen):</b>\n<code>${escapeHtml(validKeys)}</code>`,
+        { parseMode: "HTML" }
+      );
+    }
+    return;
+  }
+
+  if (command === "/unset") {
+    if (!arg) {
+      await sendTelegramMessage(
+        `Uso: <b>/unset KEY</b>\nEjemplo: <code>/unset ETF_WARNING_THRESHOLD_PERCENT</code>`,
+        { parseMode: "HTML" }
+      );
+      return;
+    }
+
+    const envKey = String(arg || "").toUpperCase();
+    try {
+      const updated = await resetEditableSetting(envKey);
+      await sendTelegramMessage(
+        `↩️ <b>${escapeHtml(updated.key)}</b> restaurado a <code>${escapeHtml(
+          updated.value
+        )}</code> desde .env`,
+        { parseMode: "HTML" }
+      );
+    } catch (error) {
+      await sendTelegramMessage(`⚠️ ${escapeHtml(error.message)}`, { parseMode: "HTML" });
+    }
+    return;
+  }
+
   if (command === "/ayuda" || command === "/help") {
     await sendTelegramMessage(
       `<b>🤖 Market Watcher — Commands</b>\n\n` +
@@ -120,6 +202,9 @@ async function handleCommand(text, state, handlers) {
         `/price SYMBOL — Current price for an asset\n` +
         `/status — Bot status and last check\n` +
         `/events — Recent alert and schedule history\n` +
+      `/config — Show current runtime config\n` +
+      `/set KEY VALUE — Update runtime config\n` +
+      `/unset KEY — Restore value from .env\n` +
         `/help — This help\n\n` +
         `<i>Examples: /price BTC  /price GLD  /price AAPL</i>`,
       { parseMode: "HTML" }

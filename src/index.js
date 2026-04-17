@@ -4,6 +4,7 @@ const { runCycle, buildDailyReport, fetchAllQuotes } = require("./marketMonitor"
 const { sendTelegramMessage } = require("./telegram");
 const { pollAndHandle } = require("./telegramCommands");
 const { startWebServer } = require("./webServer");
+const { loadRuntimeConfig } = require("./runtimeConfig");
 const { logger } = require("./utils/logger");
 
 let cycleRunning = false;
@@ -47,6 +48,7 @@ async function safeRunCycle(state, options) {
 }
 
 async function main() {
+  await loadRuntimeConfig();
   validateConfig();
   const state = await loadState();
 
@@ -57,19 +59,23 @@ async function main() {
   logger.info("Starting market monitor...");
   await safeRunCycle(state, { isStartup: true });
 
-  setInterval(async () => {
+  const runCycleLoop = async () => {
     await safeRunCycle(state, { isStartup: false });
-  }, config.checkIntervalMs);
+    setTimeout(runCycleLoop, config.checkIntervalMs);
+  };
+  setTimeout(runCycleLoop, config.checkIntervalMs);
 
   // Telegram command polling (/report, /price, /status, /help)
   const commandHandlers = { buildDailyReport, fetchAllQuotes };
-  setInterval(async () => {
+  const pollLoop = async () => {
     try {
       await pollAndHandle(state, commandHandlers);
     } catch (error) {
       logger.warn(`Telegram polling error: ${error.message}`);
     }
-  }, config.commandPollIntervalMs);
+    setTimeout(pollLoop, config.commandPollIntervalMs);
+  };
+  setTimeout(pollLoop, config.commandPollIntervalMs);
 
   logger.info(
     `Background monitor active. Interval: ${Math.round(config.checkIntervalMs / 60000)} minutes.`
